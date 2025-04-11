@@ -1,7 +1,7 @@
 # H2A.Z
 A collection of scripts used for H2A.Z paper.
 
-| file  | figure |
+| File  | Figure |
 | ------------- | ------------- |
 | Allpeaks_PCA.R  | 1e |
 | plotAnnoPie.R  | 1d |
