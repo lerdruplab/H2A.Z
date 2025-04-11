@@ -20,4 +20,13 @@ TEbubbleplots.Rmd wasused for figure 4b & S4a
 
 z-score_plot.R was used for Figure S1c
 
-
+| file  | figure |
+| ------------- | ------------- |
+| Allpeaks_PCA.R  | 1e |
+| plotAnnoPie.R  | 1d |
+| H2AZbubbleplots.Rmd  | 2c |
+| LADbubbleplots.Rmd  | 3c |
+| peaks_go_heatmap.R  | 3g |
+| TEbubbleplots.Rmd  | 3f |
+| plotAnnoPie.R  | 4b & S4a |
+| z-score_plot.R  | S1c |
