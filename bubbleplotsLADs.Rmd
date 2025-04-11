@@ -1,0 +1,217 @@
+
+Load relevant packages
+```{r setup, include=FALSE}
+library('tidyverse')
+library('ggplot2')
+library('dplyr')
+library('tidyr')
+```
+
+Loading in data and implementing minor adjustments
+```{r}
+#load data
+df <- read_tsv('Clustered merged H2AZ peaks overlap with LADs.txt')
+```
+
+
+```{r}
+allClusters <- 1:(nrow(table(df$`Order based on stages`)))
+allInsertions <- c("Not in LADs", "LADs both", "mLAD only", "pLAD only")
+columnx <- "Order based on stages"
+```
+
+
+The log2fold calculation
+```{r}
+straintable <- df
+#calculating the average distribution across all clusters
+totalcounts <- sapply(allInsertions, function(col) sum(straintable[[col]], na.rm = FALSE))
+
+#initiating matrix
+globaldf <- data.frame(x=allInsertions, counts=totalcounts)
+finalmatrix <- matrix(0, nrow = length(allInsertions), ncol = length(allClusters))
+rownames(finalmatrix) <- allInsertions
+colnames(finalmatrix) <- allClusters
+
+#creating nested loop as to make a table with cluster/logfold for chosen strain
+for (INSx in allInsertions) {
+  for (clusterx in allClusters) {
+    cluster1 <- straintable %>% 
+      dplyr::select(columnx, allInsertions) %>% filter(straintable[[columnx]] == clusterx )
+    
+    counts <- sapply(allInsertions, function(col) sum(cluster1[[col]], na.rm = FALSE))
+    localdf <- data.frame(x=allInsertions, counts=counts)
+    localdf <- localdf %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
+    globaldf$freq <- globaldf$counts/sum(globaldf$counts)
+    totallocalcounts <- sum(localdf$counts)
+    localdf$expectedcounts <- totallocalcounts*globaldf$freq
+    localdf$logfoldchange <- log2(localdf$counts/localdf$expectedcounts)
+    
+    finalmatrix[INSx, as.character(clusterx)] <- localdf$logfoldchange[which(localdf$x == INSx)]
+    
+  }
+}
+
+finaldf <- as.data.frame(as.table(finalmatrix))
+
+# Rename the columns for clarity
+colnames(finaldf) <- c("INSx", "Clusterx", "Log2foldchange")
+
+```
+
+
+```{r}
+ressurectdf <- df
+```
+
+```{r}
+df <- ressurectdf
+```
+
+
+
+The statistical analysis 
+Warnings are silenced, as there will be warnings where it finds a 0.
+```{r}
+table <- df
+
+#defining the chi square test function
+perform_chi_square_test <- function(row) {
+  matrix_data <- matrix(c(row$INSin, row$INSout, row$nonINSin, row$nonINSout), nrow = 2, byrow = TRUE)
+  test_result <- chisq.test(matrix_data, correct = FALSE)
+  return(test_result)
+}
+
+finalmatrix <- matrix(NA, nrow = length(allClusters), ncol = length(allInsertions))
+colnames(finalmatrix) <- allInsertions
+rownames(finalmatrix) <- allClusters
+
+for (INSx in allInsertions) {
+  for (clusterx in allClusters) {
+    
+    INSin     <- table %>% filter(.data[[INSx]] == 0, table[[columnx]] == clusterx) 
+    INSout    <- table %>% filter(.data[[INSx]] == 1, table[[columnx]] == clusterx) 
+    nonINSin  <- table %>% filter(.data[[INSx]] == 0, table[[columnx]] != clusterx) 
+    nonINSout <- table %>% filter(.data[[INSx]] == 1, table[[columnx]] != clusterx)
+    
+    # Create a one-row data frame directly
+    df <- data.frame(
+      INSin = nrow(INSin),
+      INSout = nrow(INSout),
+      nonINSin = nrow(nonINSin),
+      nonINSout = nrow(nonINSout)
+    )
+    
+    chi_square_results <- df %>%
+      rowwise() %>%
+      mutate(
+        test_result = list(perform_chi_square_test(cur_data()))
+      ) %>%
+      ungroup() %>%
+      mutate(
+        p_value = map_dbl(test_result, ~ .x$p.value)
+      ) %>%
+      dplyr::select(-test_result)
+    
+    finalmatrix[clusterx, as.character(INSx)] <- chi_square_results$p_value
+  }
+}
+
+
+
+```
+
+
+```{r, warning=FALSE}
+# matrix with adjusted p-values:
+p_vector <- as.vector(finalmatrix)
+
+# apply the p-value adjustment (Benjamini-Hochberg)
+p_adjusted_vector <- p.adjust(p_vector, method = "BH")
+
+# reshaping the adjusted p-values vector back into the original matrix dimensions
+adjusted_p_matrix <- matrix(p_adjusted_vector, nrow = nrow(finalmatrix), ncol = ncol(finalmatrix))
+colnames(adjusted_p_matrix) <- allInsertions
+rownames(adjusted_p_matrix) <- allClusters
+
+finaldf2 <- as.data.frame(as.table(adjusted_p_matrix))
+
+# Rename the columns for clarity
+colnames(finaldf2) <- c("Clusterx2", "INSx2", "pvalue")
+
+```
+
+
+
+Merging data and creating plots
+```{r}
+finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$INSx)
+finaldf$ID <- paste(finaldf$Clusterx, finaldf$INSx)
+
+df_merge <- merge(finaldf, finaldf2,by="ID") 
+
+colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
+
+# Modify the significance column to numeric values
+df_merge$logsignificance <- -log10(df_merge$pvalue)
+df_merge$Clusterx = as.numeric(df_merge$Clusterx)
+```
+
+
+```{r}
+# Modify so that the logfolds are max 2 and min -2 and that the significance is maximum 20
+df_merge$Log2foldchange <- with(df_merge, ifelse(Log2foldchange > 2, 2, ifelse(Log2foldchange < -2, -2, Log2foldchange)))
+df_merge$logsignificance <- with(df_merge, ifelse(logsignificance > 300, 300, logsignificance))
+```
+
+
+```{r}
+# Plot using the modified significance column
+a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
+  geom_point(aes(color = Log2foldchange)) +
+  theme_minimal() +
+  labs(title = paste("Bubble plot"),
+       x = "Inserition type",
+       y = "Cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
+  scale_y_reverse(breaks=1:20) +
+  scale_size(range = c(1, 15), limits = c(0,200)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "blue", mid = "white", high = "brown", midpoint = 0, limits = c(-2, 2)) #Limit sets the top and bottom, but values that falls outside this category will be grey
+
+a
+
+
+```
+
+If desired:
+
+Plot, with removed logsiginificance under the wanted one:
+
+```{r}
+# defining the significance from the -log10 p value calculations
+oursignificance <- -log10(0.05)
+df_merge$Clusterx = as.numeric(df_merge$Clusterx)
+```
+
+
+```{r}
+# Plot using the modified significance column
+a <- ggplot(df_merge, aes(y = Clusterx, x = INSx, size = logsignificance)) +
+  geom_point(aes(color = Log2foldchange)) +
+  theme_minimal() +
+  labs(title = paste("H2AZ"),
+       x = "Gene type",
+       y = "Cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  #  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
+  scale_size(range = c(1, 15), limits = c(oursignificance,300)) +
+  scale_y_reverse(breaks=1:20) +# this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "#77008f", mid = "white", high = "#018d1f", midpoint = 0) #Limit sets the top and bottom, but values that falls outside this category will be grey
+
+
+a
+
+
+```
+
