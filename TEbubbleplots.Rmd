@@ -1,0 +1,306 @@
+
+
+Loading in packages and making a collected dataframe, where the duplicates within the clusters have been removed
+```{r}
+library('dplyr')
+library('tidyr')
+library('tidyverse')
+library('ggplot2')
+library("readxl")
+```
+
+
+```{r}
+df_excel <- read_excel("Peaks no TSS or CpG repeatmasker.xlsx")
+```
+
+
+```{r}
+df <- df_excel
+
+# Removing the additional added numbers
+for ( col in 1:ncol(df)){
+    colnames(df)[col] <-  sub("\\...*", "", colnames(df)[col])
+}
+
+df <- df[1:(nrow(df)-1),] # removing sum column
+
+names(df)[names(df) == 'Order based on stages'] <- 'Cluster'
+
+types_class <- colnames(df[12:19])
+
+types_family <- colnames(df[21:39]) # change the names
+
+types_name <- colnames(df[41:130]) # change the names
+```
+
+Making a new dataframe only keeping the columns needed and then renaming them to fit the data
+(classification, cluster, group1, group2, group3, etc.)
+```{r}
+df_class <- df %>% select("Cluster", types_class)
+
+#df_class <- setNames(df_class, c("Cluster", "SINE", "LTR", "Simple_repeat", "LINE", "Low_complexity", "DNA", "Other", "Satellite"))
+
+df_family <- df %>% select("Cluster", types_family)
+
+df_name <- df %>% select("Cluster", types_name)
+
+```
+
+
+Initiating the process with the data and parameters:
+
+chosen classification to make the type distinction
+```{r}
+df <- df_class
+types <- types_class
+```
+
+The log2fold calculation
+
+Getting the clusters and total counts for the types
+```{r}
+allClusters <- 1:(nrow(table(df$Cluster)))
+
+totalcounts <- sapply(types, function(col) sum(df[[col]], na.rm = FALSE))
+sum(totalcounts)
+```
+
+Removing zeros/(maybe not nescessary but implement the rows with no type)
+```{r}
+df_no_cluster <- df %>% select(types)
+zero_rows <- df_no_cluster[rowSums(df_no_cluster == 0) == ncol(df_no_cluster), ]
+
+```
+
+
+```{r}
+totalcounts <- sapply(types, function(col) sum(df[[col]], na.rm = FALSE))
+hej <- as.data.frame(totalcounts)
+
+
+```
+
+
+```{r}
+#initiating matrix
+globaldf <- data.frame(x=types, counts=totalcounts)
+finalmatrix <- matrix(0, nrow = length(types), ncol = length(allClusters))
+rownames(finalmatrix) <- types
+colnames(finalmatrix) <- allClusters
+```
+
+
+```{r}
+#creating nested loop as to make a table with cluster/logfold for chosen strain
+for (GENEx in types) {
+  for (clusterx in allClusters) {
+    cluster1 <- df %>% 
+      select('Cluster', types) %>% filter(Cluster == clusterx )
+    
+    counts <- sapply(types, function(col) sum(cluster1[[col]], na.rm = FALSE))
+    localdf <- data.frame(x=types, counts=counts)
+    localdf <- localdf %>% mutate(across(where(is.numeric), ~ .x + 1)) #adding 1 to every value to avoid 0
+    globaldf$freq <- globaldf$counts/sum(globaldf$counts)
+    totallocalcounts <- sum(localdf$counts)
+    localdf$expectedcounts <- totallocalcounts*globaldf$freq
+    localdf$logfoldchange <- log2(localdf$counts/localdf$expectedcounts)
+    
+    finalmatrix[GENEx, as.character(clusterx)] <- localdf$logfoldchange[which(localdf$x == GENEx)]
+    
+  }
+}
+
+finaldf <- as.data.frame(as.table(finalmatrix))
+
+# Rename the columns for clarity
+colnames(finaldf) <- c("Genex", "Clusterx", "Log2foldchange")
+
+```
+
+
+
+
+The statistical analysis 
+Warnings are silenced, as there will be warnings where it finds a 0.
+```{r, warning=FALSE}
+table <- df
+
+
+#defining the chi square test function
+perform_chi_square_test <- function(row) {
+  matrix_data <- matrix(c(row$INSin, row$INSout, row$nonINSin, row$nonINSout), nrow = 2, byrow = TRUE)
+  test_result <- chisq.test(matrix_data, correct = FALSE)
+  return(test_result)
+}
+
+finalmatrix <- matrix(NA, nrow = length(allClusters), ncol = length(types))
+colnames(finalmatrix) <- types
+rownames(finalmatrix) <- allClusters
+
+
+for (INSx in types) {
+  list1 <- c()
+  list2 <- c()
+  list3 <- c()
+  list4 <- c()
+  for (clusterx in allClusters) {
+    
+    INSin <- table %>% filter(.data[[INSx]] == 0) %>% filter(Cluster == clusterx) 
+    INSout <- table %>% filter(.data[[INSx]] == 1) %>% filter(Cluster == clusterx) 
+    nonINSin <- table %>% filter(.data[[INSx]] == 0) %>% filter(Cluster != clusterx) 
+    nonINSout <- table %>% filter(.data[[INSx]] == 1) %>% filter(Cluster != clusterx)
+    list1<- append(list1, nrow(INSin))
+    list2<- append(list2, nrow(INSout))
+    list3<- append(list3, nrow(nonINSin))
+    list4<- append(list4, nrow(nonINSout))
+    
+    df <- data.frame(list2, list4, list1, list3)
+    names(df) <- c('INSin','INSout','nonINSin','nonINSout')
+    df2 <- tibble(df)
+    
+    chi_square_results <- df2 %>% 
+      rowwise() %>% 
+      mutate(
+        test_result = list(perform_chi_square_test(cur_data()))
+      ) %>% 
+      ungroup() %>% 
+      mutate(
+        p_value = map_dbl(test_result, ~ .x$p.value)
+      ) %>% 
+      select(-test_result)
+    
+    pval <- chi_square_results$p_value
+    p_adjusted <- p.adjust(pval, method = 'BH')
+    chi_square_results$p_adjusted <- p_adjusted
+    chi_square_results$x <- as.numeric(row.names(chi_square_results))
+    
+    finalmatrix[clusterx, as.character(INSx)] <- chi_square_results$p_value[which(chi_square_results$x == clusterx)]
+    
+  }
+}
+
+# matrix with adjusted p-values:
+p_vector <- as.vector(finalmatrix)
+
+# apply the p-value adjustment (Benjamini-Hochberg)
+p_adjusted_vector <- p.adjust(p_vector, method = "BH")
+
+# reshaping the adjusted p-values vector back into the original matrix dimensions
+adjusted_p_matrix <- matrix(p_adjusted_vector, nrow = nrow(finalmatrix), ncol = ncol(finalmatrix))
+colnames(adjusted_p_matrix) <- types
+rownames(adjusted_p_matrix) <- allClusters
+
+finaldf2 <- as.data.frame(as.table(adjusted_p_matrix))
+
+# Rename the columns for clarity
+colnames(finaldf2) <- c("Clusterx2", "Genex", "pvalue")
+
+```
+
+
+
+
+
+Merging data and creating plots
+```{r}
+finaldf2$ID <- paste(finaldf2$Clusterx, finaldf2$Genex)
+finaldf$ID <- paste(finaldf$Clusterx, finaldf$Genex)
+
+df_merge <- merge(finaldf, finaldf2, by="ID") 
+
+colnames(df_merge)[colnames(df_merge) == 'Adjusted P-value'] <- 'pvalue'
+
+# Modify the significance column to numeric values
+df_merge$logsignificance <- -log10(df_merge$pvalue)
+df_merge$Clusterx = as.numeric(df_merge$Clusterx)
+
+# Modify the numbers for plotting
+df_merge$Log2foldchange <- with(df_merge, ifelse(df_merge$Log2foldchange > 1, 1, ifelse(df_merge$Log2foldchange < -1, -1, df_merge$Log2foldchange)))
+
+df_merge$logsignificance <- with(df_merge, ifelse(logsignificance > 20, 20, logsignificance))
+```
+
+
+```{r}
+# Plot using the modified significance column
+a <- ggplot(df_merge, aes(y = Clusterx, x = factor(Genex.x, levels = types), size = logsignificance)) +
+  geom_point(aes(color = Log2foldchange)) +
+  theme_minimal() +
+  labs(title = paste("clusters and expression of genes"),
+       x = "Gene type",
+       y = "Cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+#  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
+  scale_y_reverse(breaks=1:20) +
+  scale_size(range = c(1, 15), limits = c(0.1,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "#77008f", mid = "white", high = "#018d1f", midpoint = 0,limits = c(-1, 1)) #Limit sets the top and bottom, but values that falls outside this category will be grey
+
+
+a
+
+
+
+```
+
+Here sorting the Transposable elements on name level by class(only do this if visualizing on name level):
+
+```{r}
+df_types <- read_excel("repeat type frequencies.xlsx")
+
+# Getting the class for each 
+
+df_classification <- df_excel[,8:10]
+df_classification <- setNames(df_classification, c("Name", "Class", "Family"))
+df_diff_names <- df_classification %>%  filter(Name %in% types_name) %>%  distinct()
+#df_diff_names <- df_diff_names[order(df_diff_names$Class, decreasing = FALSE),]
+df_diff_names <- arrange(df_diff_names, Class, Family)
+
+# names ordered by class
+names_ordered <- df_diff_names$Name
+
+
+a <- ggplot(df_merge, aes(y = Clusterx, x = factor(Genex.x, levels = names_ordered), size = logsignificance)) +
+  geom_point(aes(color = Log2foldchange)) +
+  theme_minimal() +
+  labs(title = paste("clusters and expression of genes"),
+       x = "Gene type",
+       y = "Cluster") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  #  scale_size_continuous(range = c(1, 10)) +             # Adjust the range to control the size of the points for only one plot
+  scale_y_reverse(breaks=1:20) +
+  scale_size(range = c(1, 15), limits = c(0.1,20)) +  # this used to compare between plots. to make them comparable, range decides size and limits decides top value
+  scale_color_gradient2(low = "#77008f", mid = "white", high = "#018d1f", midpoint = 0,limits = c(-1, 1)) #Limit sets the top and bottom, but values that falls outside this category will be grey
+
+
+a
+
+```
+
+
+```{r}
+install.packages('writexl')
+
+library(writexl)
+
+write_xlsx(df_diff_names, "TE_Classicifations.xlsx")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
