@@ -1,5 +1,3 @@
-
-
 Loading in packages and making a collected dataframe, where the duplicates within the clusters have been removed
 ```{r}
 library('dplyr')
@@ -14,7 +12,7 @@ library("readxl")
 df_excel <- read_excel("Peaks no TSS or CpG repeatmasker.xlsx")
 ```
 
-
+The dataset consists of the transposable elements devided into different phylogenic levels, where 3 are defined in our dataset
 ```{r}
 df <- df_excel
 
@@ -29,9 +27,9 @@ names(df)[names(df) == 'Order based on stages'] <- 'Cluster'
 
 types_class <- colnames(df[12:19])
 
-types_family <- colnames(df[21:39]) # change the names
+types_family <- colnames(df[21:39]) # could also be identified as super family
 
-types_name <- colnames(df[41:130]) # change the names
+types_name <- colnames(df[41:130]) # could also be called family
 ```
 
 Making a new dataframe only keeping the columns needed and then renaming them to fit the data
@@ -39,48 +37,35 @@ Making a new dataframe only keeping the columns needed and then renaming them to
 ```{r}
 df_class <- df %>% select("Cluster", types_class)
 
-#df_class <- setNames(df_class, c("Cluster", "SINE", "LTR", "Simple_repeat", "LINE", "Low_complexity", "DNA", "Other", "Satellite"))
-
 df_family <- df %>% select("Cluster", types_family)
 
 df_name <- df %>% select("Cluster", types_name)
-
 ```
 
 
 Initiating the process with the data and parameters:
 
-chosen classification to make the type distinction
+chosen phylogenic level to make the type distinction
 ```{r}
-df <- df_class
-types <- types_class
+df <- df_family
+types <- types_family
 ```
 
 The log2fold calculation
-
-Getting the clusters and total counts for the types
 ```{r}
+#Getting the clusters and total counts for the types
 allClusters <- 1:(nrow(table(df$Cluster)))
 
 totalcounts <- sapply(types, function(col) sum(df[[col]], na.rm = FALSE))
 sum(totalcounts)
 ```
 
-Removing zeros/(maybe not nescessary but implement the rows with no type)
+Removing zeros/(maybe not necessary but implement the rows with no type)
 ```{r}
 df_no_cluster <- df %>% select(types)
 zero_rows <- df_no_cluster[rowSums(df_no_cluster == 0) == ncol(df_no_cluster), ]
 
 ```
-
-
-```{r}
-totalcounts <- sapply(types, function(col) sum(df[[col]], na.rm = FALSE))
-hej <- as.data.frame(totalcounts)
-
-
-```
-
 
 ```{r}
 #initiating matrix
@@ -88,11 +73,8 @@ globaldf <- data.frame(x=types, counts=totalcounts)
 finalmatrix <- matrix(0, nrow = length(types), ncol = length(allClusters))
 rownames(finalmatrix) <- types
 colnames(finalmatrix) <- allClusters
-```
 
-
-```{r}
-#creating nested loop as to make a table with cluster/logfold for chosen strain
+#creating nested loop as to make a table with cluster/logfold for categorization
 for (GENEx in types) {
   for (clusterx in allClusters) {
     cluster1 <- df %>% 
@@ -115,17 +97,11 @@ finaldf <- as.data.frame(as.table(finalmatrix))
 
 # Rename the columns for clarity
 colnames(finaldf) <- c("Genex", "Clusterx", "Log2foldchange")
-
 ```
 
-
-
-
-The statistical analysis 
-Warnings are silenced, as there will be warnings where it finds a 0.
+The statistical analysis calculating the significance based on the chi square test and then adjusting the p-value. Warnings are silenced, as there will be warnings where it finds a 0.
 ```{r, warning=FALSE}
 table <- df
-
 
 #defining the chi square test function
 perform_chi_square_test <- function(row) {
@@ -195,11 +171,7 @@ finaldf2 <- as.data.frame(as.table(adjusted_p_matrix))
 
 # Rename the columns for clarity
 colnames(finaldf2) <- c("Clusterx2", "Genex", "pvalue")
-
 ```
-
-
-
 
 
 Merging data and creating plots
@@ -239,12 +211,10 @@ a <- ggplot(df_merge, aes(y = Clusterx, x = factor(Genex.x, levels = types), siz
 
 a
 
-
-
 ```
 
-Here sorting the Transposable elements on name level by class(only do this if visualizing on name level):
 
+Here sorting the Transposable elements on name level by class(only do this if visualizing on name level):
 ```{r}
 df_types <- read_excel("repeat type frequencies.xlsx")
 
@@ -279,28 +249,6 @@ a
 
 
 ```{r}
-install.packages('writexl')
-
 library(writexl)
-
 write_xlsx(df_diff_names, "TE_Classicifations.xlsx")
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
