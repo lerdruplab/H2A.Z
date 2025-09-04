@@ -1,4 +1,4 @@
-# this script reads takes H2AZ peaks as df and performs
+# this script takes H2AZ peaks as df and performs
 # GO analysis and outputs results for each cluster
 
 # dependencies
