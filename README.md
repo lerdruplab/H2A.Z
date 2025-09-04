@@ -8,8 +8,8 @@ A collection of scripts used for H2A.Z paper.
 | plotAnnoPie.R  | 1f |
 | H2AZbubbleplots.Rmd  | 2c |
 | LADbubbleplots.Rmd  | 3c |
-| peaks_go.R  | 3h |
+| plotAnnoClust.R  | 3f |
+| peaks_go.R  | 3g |
 | peaks_go_heatmap.R  | 3g |
 | TEbubbleplots.Rmd  | 4b & S5a |
-| plotAnnoClust.R  | 3f |
 | z-score_plot.R  | S1c |
