@@ -4,7 +4,7 @@ A collection of scripts used for H2A.Z paper.
 | File  | Figure |
 | ------------- | ------------- |
 | fluorescenceBoxplots.R| 1e |
-| Allpeaks_PCA.R  | 1g |
+| peaks_PCA.R  | 1g |
 | plotAnnoPie.R  | 1f |
 | H2AZbubbleplots.Rmd  | 2c |
 | LADbubbleplots.Rmd  | 3c |
