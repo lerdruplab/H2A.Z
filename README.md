@@ -17,6 +17,7 @@ TxDb.Mmusculus.UCSC.mm10.knownGene \
 GenomicRanges
 
 ## Easy installation of all packages by creating a conda environment:
+Executing the command below in terminal will create a conda environment with all the required R packages.
 ```bash
 conda create -n h2az_lerdrup r-base=4.3.3 r-tidyverse r-lintr r-languageserver r-devtools nodejs r-readxl r-rstatix r-plot3d r-ggrepel r-gprofiler2 r-ggpubr r-gridextra bioconductor-complexheatmap bioconductor-chipseeker bioconductor-txdb.mmusculus.ucsc.mm10.knowngene bioconda::bioconductor-genomicranges
 ```
