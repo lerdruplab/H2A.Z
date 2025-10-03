@@ -35,6 +35,7 @@ conda create -n h2az_lerdrup r-base=4.3.3 r-tidyverse r-lintr r-languageserver r
 | peaks_go_heatmap.R  | 3g |
 | TEbubbleplots.Rmd  | 4b & S5a |
 | z-score_plot.R  | S1c |
+| CorrelationMatrices.R | S1f, S2a, S2b & S2d |
 
 ## Contact
 If you encounter any difficulties running the scripts, please create a new issue in the repository’s Issues section.
