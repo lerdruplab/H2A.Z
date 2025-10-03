@@ -14,7 +14,8 @@ gridExtra \
 ComplexHeatmap \
 ChIPseeker \
 TxDb.Mmusculus.UCSC.mm10.knownGene \
-GenomicRanges
+GenomicRanges \
+corrplot
 
 ## Easy installation of all packages by creating a conda environment:
 Executing the command below in terminal will create a conda environment with all the required R packages.
